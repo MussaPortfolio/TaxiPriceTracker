@@ -6,15 +6,18 @@
 Сбору цен (taxi_price.py) не мешает: только читает taxi_prices.csv.
 Остановить: Ctrl+C.
 """
+import importlib
 import sys
 import webbrowser
+from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import taxi_report
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
 
-# Раз в 30 секунд страница спрашивает /version и перезагружается, если CSV изменился
+# Раз в 30 секунд страница спрашивает /version и перезагружается, если появился
+# новый замер или изменился код отчёта
 LIVE_JS = """
 <script>
 let v = null;
@@ -31,9 +34,25 @@ EMPTY = ("<!doctype html><meta charset='utf-8'><meta http-equiv='refresh' conten
          "<p style='font-family:system-ui'>Замеров с ценой пока нет — страница обновится сама.</p>")
 
 
+REPORT_PY = taxi_report.__file__
+_report_mtime = Path(REPORT_PY).stat().st_mtime
+
+
+def fresh_report():
+    """taxi_report с последними правками кода — без перезапуска сервера."""
+    global _report_mtime
+    mtime = Path(REPORT_PY).stat().st_mtime
+    if mtime != _report_mtime:
+        _report_mtime = mtime
+        importlib.reload(taxi_report)
+    return taxi_report
+
+
 def csv_version():
+    """Меняется и при новом замере, и при правке кода отчёта — тогда страница перезагрузится."""
     p = taxi_report.CSV_PATH
-    return str(p.stat().st_mtime) if p.exists() else "0"
+    data = p.stat().st_mtime if p.exists() else 0
+    return f"{data}-{Path(REPORT_PY).stat().st_mtime}"
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -42,7 +61,7 @@ class Handler(BaseHTTPRequestHandler):
             body, ctype = csv_version(), "text/plain"
         elif self.path == "/":
             try:
-                body = taxi_report.render(LIVE_JS) or EMPTY
+                body = fresh_report().render(LIVE_JS) or EMPTY
             except Exception as e:  # например, CSV дописывается прямо сейчас
                 body = f"<meta http-equiv='refresh' content='5'><p>Ошибка: {e}</p>"
             ctype = "text/html"

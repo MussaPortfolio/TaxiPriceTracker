@@ -20,12 +20,15 @@ L, R, T, B = 50, 15, 15, 30          # отступы под оси
 
 
 def load():
+    """Замеры с ценой и число неудачных замеров (капча, цена не найдена и т. п.)."""
     with CSV_PATH.open(encoding="utf-8-sig") as f:
-        return [
-            (datetime.strptime(r["время"], "%Y-%m-%d %H:%M"), int(r["цена_руб"]),
-             r["повышенный_спрос"] == "да")
-            for r in csv.DictReader(f, delimiter=";") if r["цена_руб"]
-        ]
+        all_rows = list(csv.DictReader(f, delimiter=";"))
+    rows = [
+        (datetime.strptime(r["время"], "%Y-%m-%d %H:%M"), int(r["цена_руб"]),
+         r["повышенный_спрос"] == "да")
+        for r in all_rows if r["цена_руб"]
+    ]
+    return rows, len(all_rows) - len(rows)
 
 
 def y_axis(lo, hi):
@@ -83,7 +86,8 @@ def timeline_chart(rows):
 
 def render(head_extra=""):
     """HTML-отчёт строкой или None, если замеров с ценой пока нет."""
-    rows = sorted(load()) if CSV_PATH.exists() else []
+    rows, failed = load() if CSV_PATH.exists() else ([], 0)
+    rows.sort()
     if not rows:
         return None
     hourly, avg = hourly_chart(rows)
@@ -111,7 +115,7 @@ svg {{ width:100%; height:auto; }}
 .line {{ fill:none; stroke:var(--line); stroke-width:1.5; }}
 </style></head><body><main>
 <h1>Когда дешевле ехать на такси</h1>
-<p class="muted">{len(rows)} замеров, {rows[0][0]:%d.%m.%Y %H:%M} — {rows[-1][0]:%d.%m.%Y %H:%M}.
+<p class="muted">{len(rows) + failed} замеров{f" (из них {failed} без цены — ошибка)" if failed else ""}, {rows[0][0]:%d.%m.%Y %H:%M} — {rows[-1][0]:%d.%m.%Y %H:%M}.
 Повышенный спрос был в {surge:.0f}% замеров.</p>
 <p><b style="color:var(--cheap)">Дешевле всего:</b> {fmt(best)}</p>
 <p><b style="color:var(--dear)">Дороже всего:</b> {fmt(worst)}</p>
