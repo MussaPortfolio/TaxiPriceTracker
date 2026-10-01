@@ -1,0 +1,6 @@
+.venv/
+.idea/
+__pycache__/
+*.pyc
+taxi_prices.csv
+taxi_report.html
